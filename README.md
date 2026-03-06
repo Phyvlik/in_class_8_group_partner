@@ -62,6 +62,22 @@ flutter pub get
 flutter run -d android
 ```
 
+## Bonus Features
+
+### Gallery Image Picker with Base64 Storage
+
+When adding or editing a card, users can tap **"Pick Image from Gallery"** to select a photo from their device instead of typing a URL.
+
+**Implementation approach:**
+- Uses the `image_picker` package to open the device photo library
+- The selected image is read as raw bytes and encoded to a Base64 string using `dart:convert`
+- The Base64 string is stored directly in the `image_url` column of the SQLite `cards` table — no separate file or file path needed
+- On display, the app checks whether `image_url` starts with `http`: if not, it decodes the Base64 back to bytes and renders with `Image.memory`; otherwise it renders with `Image.network`
+- If both a gallery image and a URL are provided, the gallery image takes priority
+- Required permissions added: `READ_MEDIA_IMAGES` (Android 13+), `READ_EXTERNAL_STORAGE` (Android ≤12), `NSPhotoLibraryUsageDescription` (iOS)
+
+**Trade-offs:** Storing Base64 in SQLite keeps all data in one place with no file management, but increases database size. This is acceptable for a small card collection.
+
 ## Dependencies
 
 - `sqflite` — SQLite database

@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/folder.dart';
 import '../models/playing_card.dart';
 import '../repositories/card_repository.dart';
@@ -16,16 +19,25 @@ class AddEditCardScreen extends StatefulWidget {
 class _AddEditCardScreenState extends State<AddEditCardScreen> {
   final _formKey = GlobalKey<FormState>();
   final CardRepository _cardRepo = CardRepository();
+  final ImagePicker _picker = ImagePicker();
 
   late TextEditingController _nameController;
   late TextEditingController _imageUrlController;
   String _suit = 'Hearts';
+  String? _base64Image; // gallery-picked image stored as base64
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.card?.cardName ?? '');
-    _imageUrlController = TextEditingController(text: widget.card?.imageUrl ?? '');
+    final existingUrl = widget.card?.imageUrl ?? '';
+    // If stored value is base64 (not a URL), restore it to gallery state
+    if (existingUrl.isNotEmpty && !existingUrl.startsWith('http')) {
+      _base64Image = existingUrl;
+      _imageUrlController = TextEditingController(text: '');
+    } else {
+      _imageUrlController = TextEditingController(text: existingUrl);
+    }
     _suit = widget.card?.suit ?? 'Hearts';
   }
 
@@ -36,15 +48,37 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
     super.dispose();
   }
 
+  Future<void> _pickFromGallery() async {
+    final XFile? picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+
+    final bytes = await File(picked.path).readAsBytes();
+    setState(() {
+      _base64Image = base64Encode(bytes);
+      _imageUrlController.clear();
+    });
+  }
+
   Future<void> _saveCard() async {
     if (_formKey.currentState!.validate()) {
+      // Gallery base64 takes priority over typed URL
+      String? imageValue;
+      if (_base64Image != null) {
+        imageValue = _base64Image;
+      } else if (_imageUrlController.text.trim().isNotEmpty) {
+        imageValue = _imageUrlController.text.trim();
+      }
+
       final card = PlayingCard(
         id: widget.card?.id,
         cardName: _nameController.text.trim(),
         suit: _suit,
-        imageUrl: _imageUrlController.text.trim().isEmpty
-            ? null
-            : _imageUrlController.text.trim(),
+        imageUrl: imageValue,
         folderId: widget.folder.id!,
       );
 
@@ -56,6 +90,32 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
 
       Navigator.pop(context);
     }
+  }
+
+  Widget _buildPreview() {
+    if (_base64Image != null) {
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Image.memory(
+          base64Decode(_base64Image!),
+          height: 120,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => Icon(Icons.broken_image, size: 60),
+        ),
+      );
+    }
+    if (_imageUrlController.text.isNotEmpty) {
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Image.network(
+          _imageUrlController.text,
+          height: 120,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => Icon(Icons.broken_image, size: 60),
+        ),
+      );
+    }
+    return SizedBox.shrink();
   }
 
   @override
@@ -92,18 +152,25 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
                   labelText: 'Image URL (optional)',
                   hintText: 'https://example.com/card.png',
                 ),
+                onChanged: (_) {
+                  if (_base64Image != null) {
+                    setState(() => _base64Image = null);
+                  } else {
+                    setState(() {});
+                  }
+                },
               ),
-              SizedBox(height: 8),
-              if (_imageUrlController.text.isNotEmpty)
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Image.network(
-                    _imageUrlController.text,
-                    height: 120,
-                    errorBuilder: (_, _, _) =>
-                        Icon(Icons.broken_image, size: 60),
-                  ),
+              SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _pickFromGallery,
+                icon: Icon(Icons.photo_library),
+                label: Text(
+                  _base64Image != null
+                      ? 'Gallery image selected — tap to change'
+                      : 'Pick Image from Gallery',
                 ),
+              ),
+              _buildPreview(),
               SizedBox(height: 24),
               Row(
                 children: [

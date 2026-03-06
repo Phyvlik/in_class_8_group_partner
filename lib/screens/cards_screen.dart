@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/folder.dart';
 import '../models/playing_card.dart';
@@ -63,6 +64,22 @@ class _CardsScreenState extends State<CardsScreen> {
     if (card.imageUrl == null || card.imageUrl!.isEmpty) {
       return Icon(Icons.style, size: 48, color: Colors.grey);
     }
+    // Base64-encoded gallery image
+    if (!card.imageUrl!.startsWith('http')) {
+      try {
+        return Image.memory(
+          base64Decode(card.imageUrl!),
+          width: 60,
+          height: 84,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) =>
+              Icon(Icons.broken_image, size: 48, color: Colors.grey),
+        );
+      } catch (_) {
+        return Icon(Icons.broken_image, size: 48, color: Colors.grey);
+      }
+    }
+    // Network URL
     return Image.network(
       card.imageUrl!,
       width: 60,
